@@ -92,10 +92,16 @@ public class StanfordCoreNLPServer implements Runnable {
    */
   public StanfordCoreNLPServer() throws IOException {
     defaultProps = PropertiesUtils.asProperties(
-            "annotators", "tokenize, ssplit, pos, lemma, ner, depparse, coref, natlog, openie",
-            "coref.md.type", "dep",
+            "annotators", "tokenize, ssplit, pos, lemma, ner",
+            "ner.combinationMode", "HIGH_RECALL",
+            "ner.useSUTime", "True",
+            "sutime.verbose", "True",
+            "sutime.searchForDocDate", "True",
+            "sutime.includeRange", "True",
+            "sutime.markTimeRanges", "True",
+            "sutime.teRelHeurLevel", "MORE",
             "inputFormat", "text",
-            "outputFormat", "json",
+            "outputFormat", "text",
             "prettyPrint", "false");
 
     // Generate and write a shutdown key
