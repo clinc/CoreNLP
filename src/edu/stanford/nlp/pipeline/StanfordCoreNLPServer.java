@@ -95,7 +95,6 @@ public class StanfordCoreNLPServer implements Runnable {
             "annotators", "tokenize, ssplit, pos, lemma, ner",
             "ner.combinationMode", "HIGH_RECALL",
             "ner.useSUTime", "True",
-            "sutime.verbose", "True",
             "sutime.searchForDocDate", "True",
             "sutime.includeRange", "True",
             "sutime.markTimeRanges", "True",
