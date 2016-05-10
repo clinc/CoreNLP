@@ -42,7 +42,7 @@ public class StanfordCoreNLPServer implements Runnable {
 
   protected HttpServer server;
   @ArgumentParser.Option(name="port", gloss="The port to run the server on")
-  protected int serverPort = 9000;
+  protected int serverPort = 25900;
   @ArgumentParser.Option(name="timeout", gloss="The default timeout, in milliseconds")
   protected int timeoutMilliseconds = 15000;
   @ArgumentParser.Option(name="strict", gloss="If true, obey strict HTTP standards (e.g., with encoding)")
