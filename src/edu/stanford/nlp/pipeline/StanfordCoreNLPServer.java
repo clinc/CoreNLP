@@ -100,7 +100,6 @@ public class StanfordCoreNLPServer implements Runnable {
    */
   public StanfordCoreNLPServer() throws IOException {
     defaultProps = PropertiesUtils.asProperties(
-<<<<<<< HEAD
             "annotators", "tokenize, ssplit, pos, lemma, ner",
             "ner.combinationMode", "HIGH_RECALL",
             "ner.useSUTime", "True",
