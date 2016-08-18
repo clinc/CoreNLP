@@ -1,8 +1,8 @@
 package edu.stanford.nlp.simple;
 
-import edu.stanford.nlp.hcoref.CorefCoreAnnotations;
-import edu.stanford.nlp.hcoref.data.CorefChain;
-import edu.stanford.nlp.hcoref.data.Dictionaries;
+import edu.stanford.nlp.coref.CorefCoreAnnotations;
+import edu.stanford.nlp.coref.data.CorefChain;
+import edu.stanford.nlp.coref.data.Dictionaries;
 import edu.stanford.nlp.ie.util.RelationTriple;
 import edu.stanford.nlp.io.RuntimeIOException;
 import edu.stanford.nlp.ling.CoreAnnotations;
@@ -10,6 +10,7 @@ import edu.stanford.nlp.ling.CoreLabel;
 import edu.stanford.nlp.naturalli.NaturalLogicAnnotations;
 import edu.stanford.nlp.pipeline.*;
 import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations;
+import edu.stanford.nlp.sentiment.SentimentCoreAnnotations;
 import edu.stanford.nlp.trees.Tree;
 import edu.stanford.nlp.trees.TreeCoreAnnotations;
 import edu.stanford.nlp.util.*;
@@ -36,9 +37,11 @@ public class Document {
    * The empty {@link java.util.Properties} object, for use with creating default annotators.
    */
   static final Properties EMPTY_PROPS = new Properties() {{
+    setProperty("language", "english");
     setProperty("annotators", "");
     setProperty("tokenize.class", "PTBTokenizer");
     setProperty("tokenize.language", "en");
+    setProperty("parse.binaryTrees", "true");
   }};
 
   /**
@@ -48,9 +51,11 @@ public class Document {
    * @see Sentence#caseless()
    */
   static final Properties CASELESS_PROPS = new Properties() {{
+    setProperty("language", "english");
     setProperty("annotators", "");
     setProperty("tokenize.class", "PTBTokenizer");
     setProperty("tokenize.language", "en");
+    setProperty("parse.binaryTrees", "true");
     setProperty("pos.model", "edu/stanford/nlp/models/pos-tagger/wsj-0-18-caseless-left3words-distsim.tagger");
     setProperty("parse.model", "edu/stanford/nlp/models/lexparser/englishPCFG.caseless.ser.gz");
     setProperty("ner.model", "edu/stanford/nlp/models/ner/english.muc.7class.caseless.distsim.crf.ser.gz," +
@@ -61,7 +66,7 @@ public class Document {
   /**
    * The backend to use for constructing {@link edu.stanford.nlp.pipeline.AnnotatorFactory}s.
    */
-  private static final AnnotatorImplementations backend = new AnnotatorImplementations();
+  private static AnnotatorImplementations backend = new AnnotatorImplementations();
 
   /**
    * The default {@link edu.stanford.nlp.pipeline.TokenizerAnnotator} implementation
@@ -242,6 +247,21 @@ public class Document {
   };
 
   /**
+   * The default {@link edu.stanford.nlp.pipeline.SentimentAnnotator} implementation
+   */
+  private static Supplier<Annotator> defaultSentiment = new Supplier<Annotator>() {
+    Annotator impl = null;
+
+    @Override
+    public synchronized Annotator get() {
+      if (impl == null) {
+        impl = AnnotatorFactories.sentiment(EMPTY_PROPS, backend).create();
+      }
+      return impl;
+    }
+  };
+
+  /**
    * Cache the most recently used custom annotators.
    */
   private static final LinkedHashMap<String,Annotator> customAnnotators = new LinkedHashMap<>();
@@ -270,10 +290,10 @@ public class Document {
   }
 
   /** The protocol buffer representing this document */
-  private final CoreNLPProtos.Document.Builder impl;
+  protected final CoreNLPProtos.Document.Builder impl;
 
   /** The list of sentences associated with this document */
-  private List<Sentence> sentences = null;
+  protected List<Sentence> sentences = null;
 
   /** A serializer to assist in serializing and deserializing from Protocol buffers */
   protected final ProtobufAnnotationSerializer serializer = new ProtobufAnnotationSerializer(false );
@@ -289,16 +309,135 @@ public class Document {
    */
   private boolean haveRunOpenie = false;
 
+  /**
+   * THIS IS NONSTANDARD.
+   * An indicator of whether we have run the KBP annotator.
+   * Unlike most other annotators, it's quite common for a sentence to not have any extracted triples,
+   * and therefore it's hard to determine whether we should rerun the annotator based solely on the saved
+   * annotation.
+   * At the same time, the proto file should not have this flag in it.
+   * So, here it is.
+   */
+  private boolean haveRunKBP = false;
+
   /** The default properties to use for annotating things (e.g., coref for the document level) */
   private Properties defaultProps = EMPTY_PROPS;
+
+
+  /**
+   * Set the backend implementations for our CoreNLP pipeline.
+   * For example, to a {@link ServerAnnotatorImplementations}.
+   *
+   * @param backend The backend to use from now on for annotating
+   *                documents.
+   */
+  public static void setBackend(AnnotatorImplementations backend) {
+    Document.backend = backend;
+  }
+
+
+  /**
+   * Use the CoreNLP Server ({@link StanfordCoreNLPServer}) for the
+   * heavyweight backend annotation job.
+   *
+   * @param host The hostname of the server.
+   * @param port The port the server is running on.
+   */
+  public static void useServer(String host, int port) {
+    backend = new ServerAnnotatorImplementations(host, port);
+  }
+
+
+  /**
+   * Use the CoreNLP Server ({@link StanfordCoreNLPServer}) for the
+   * heavyweight backend annotation job, authenticating with the given
+   * credentials.
+   *
+   * @param host The hostname of the server.
+   * @param port The port the server is running on.
+   * @param apiKey The api key to use as the username for authentication
+   * @param apiSecret The api secrete to use as the password for authentication
+   * @param lazy Only run the annotations that are required at this time. If this is
+   *             false, we will also run a bunch of standard annotations, to cut down on
+   *             expected number of round-trips.
+   */
+  public static void useServer(String host, int port,
+                               String apiKey, String apiSecret,
+                               boolean lazy) {
+    backend = new ServerAnnotatorImplementations(host, port, apiKey, apiSecret, lazy);
+  }
+
+
+  /** @see Document#useServer(String, int, String, String, boolean) */
+  public static void useServer(String host,
+                               String apiKey, String apiSecret,
+                               boolean lazy) {
+    useServer(host, host.startsWith("http://") ? 80 : 443, apiKey, apiSecret, lazy);
+  }
+
+  /** @see Document#useServer(String, int, String, String, boolean) */
+  public static void useServer(String host,
+                               String apiKey, String apiSecret) {
+    useServer(host, host.startsWith("http://") ? 80 : 443, apiKey, apiSecret, true);
+  }
+
+
+  /**
+   * A static block that'll automatically fault in the CoreNLP server, if the appropriate environment
+   * variables are set.
+   * These are:
+   *
+   * <ul>
+   *     <li>CORENLP_HOST</li> -- this is already sufficient to trigger creating a server
+   *     <li>CORENLP_PORT</li>
+   *     <li>CORENLP_KEY</li>
+   *     <li>CORENLP_SECRET</li>
+   *     <li>CORENLP_LAZY</li>  (if true, do as much annotation on a single round-trip as possible)
+   * </ul>
+   */
+  static {
+    String host    = System.getenv("CORENLP_HOST");
+    String portStr = System.getenv("CORENLP_PORT");
+    String key     = System.getenv("CORENLP_KEY");
+    String secret  = System.getenv("CORENLP_SECRET");
+    String lazystr = System.getenv("CORENLP_LAZY");
+    if (host != null) {
+      int port = 443;
+      if (portStr == null) {
+        if (host.startsWith("http://")) {
+          port = 80;
+        }
+      } else {
+        port = Integer.parseInt(portStr);
+      }
+      boolean lazy = true;
+      if (lazystr != null) {
+        lazy = Boolean.parseBoolean(lazystr);
+      }
+      if (key != null && secret != null) {
+        useServer(host, port, key, secret, lazy);
+      } else {
+        useServer(host, port);
+      }
+    }
+  }
+
+
+  /**
+   * Create a new document from the passed in text and the given properties.
+   * @param text The text of the document.
+   */
+  public Document(Properties props, String text) {
+    this.impl = CoreNLPProtos.Document.newBuilder().setText(text);
+  }
+
 
   /**
    * Create a new document from the passed in text.
    * @param text The text of the document.
    */
   public Document(String text) {
-    StanfordCoreNLP.getDefaultAnnotatorPool(EMPTY_PROPS, new AnnotatorImplementations());  // cache the annotator pool
-    this.impl = CoreNLPProtos.Document.newBuilder().setText(text);
+    this(EMPTY_PROPS, text);
   }
 
   /**
@@ -306,8 +445,8 @@ public class Document {
    * @param ann The CoreNLP Annotation object.
    */
   @SuppressWarnings("Convert2streamapi")
-  public Document(Annotation ann) {
-    StanfordCoreNLP.getDefaultAnnotatorPool(EMPTY_PROPS, new AnnotatorImplementations());  // cache the annotator pool
+  public Document(Properties props, Annotation ann) {
+    StanfordCoreNLP.getDefaultAnnotatorPool(props, new AnnotatorImplementations());  // cache the annotator pool
     this.impl = new ProtobufAnnotationSerializer(false).toProtoBuilder(ann);
     List<CoreMap> sentences = ann.get(CoreAnnotations.SentencesAnnotation.class);
     this.sentences = new ArrayList<>(sentences.size());
@@ -316,14 +455,20 @@ public class Document {
     }
   }
 
+
+  /** @see Document#Document(Properties, Annotation) */
+  public Document(Annotation ann) {
+    this(Document.EMPTY_PROPS, ann);
+  }
+
   /**
    * Create a Document object from a read Protocol Buffer.
    * @see edu.stanford.nlp.simple.Document#serialize()
    * @param proto The protocol buffer representing this document.
    */
   @SuppressWarnings("Convert2streamapi")
-  public Document(CoreNLPProtos.Document proto) {
-    StanfordCoreNLP.getDefaultAnnotatorPool(EMPTY_PROPS, new AnnotatorImplementations());  // cache the annotator pool
+  public Document(Properties props, CoreNLPProtos.Document proto) {
+    StanfordCoreNLP.getDefaultAnnotatorPool(props, new AnnotatorImplementations());  // cache the annotator pool
     this.impl = proto.toBuilder();
     if (proto.getSentenceCount() > 0) {
       this.sentences = new ArrayList<>(proto.getSentenceCount());
@@ -331,6 +476,12 @@ public class Document {
         this.sentences.add(new Sentence(this, sentence.toBuilder(), defaultProps));
       }
     }
+  }
+
+
+  /** @see Document#Document(Properties, CoreNLPProtos.Document)  */
+  public Document(CoreNLPProtos.Document proto) {
+    this(Document.EMPTY_PROPS, proto);
   }
 
 
@@ -524,10 +675,18 @@ public class Document {
    * @return A list of Sentence objects representing the sentences in the document.
    */
   public List<Sentence> sentences(Properties props) {
+    return this.sentences(props,
+        props == EMPTY_PROPS ? defaultTokenize : AnnotatorFactories.tokenize(props, backend).create());
+  }
+
+  /**
+   * Get the sentences in this document, as a list.
+   * @param props The properties to use in the {@link edu.stanford.nlp.pipeline.WordsToSentencesAnnotator}.
+   * @return A list of Sentence objects representing the sentences in the document.
+   */
+  protected List<Sentence> sentences(Properties props, Annotator tokenizer) {
     if (sentences == null) {
-      // Get annotators
-      Annotator tokenizer = (props == EMPTY_PROPS || props == SINGLE_SENTENCE_DOCUMENT) ? defaultTokenize : AnnotatorFactories.tokenize(props, backend).create();
-      Annotator ssplit = (props == EMPTY_PROPS || props == SINGLE_SENTENCE_DOCUMENT) ? defaultSSplit : AnnotatorFactories.sentenceSplit(props, backend).create();
+      Annotator ssplit = props == EMPTY_PROPS ? defaultSSplit : AnnotatorFactories.sentenceSplit(props, backend).create();
       // Annotate
       Annotation ann = new Annotation(this.impl.getText());
       tokenizer.annotate(ann);
@@ -692,6 +851,22 @@ public class Document {
     return this;
   }
 
+  Document mockLemma(Properties props) {
+    // Cached result
+    if (this.sentences != null && this.sentences.size() > 0 && this.sentences.get(0).rawToken(0).hasLemma()) {
+      return this;
+    }
+    // Prerequisites
+    runPOS(props);
+    // Mock lemma with word
+    Annotation ann = asAnnotation();
+    for (int i = 0; i < sentences.size(); ++i) {
+      sentences.get(i).updateTokens(ann.get(CoreAnnotations.SentencesAnnotation.class).get(i).get(CoreAnnotations.TokensAnnotation.class), (pair) -> pair.first.setLemma(pair.second), CoreLabel::word);
+    }
+    return this;
+
+  }
+
   Document runNER(Properties props) {
     if (this.sentences != null && this.sentences.size() > 0 && this.sentences.get(0).rawToken(0).hasNer()) {
       return this;
@@ -741,11 +916,13 @@ public class Document {
       for (int i = 0; i < sentences.size(); ++i) {
         CoreMap sentence = ann.get(CoreAnnotations.SentencesAnnotation.class).get(i);
         Tree tree = sentence.get(TreeCoreAnnotations.TreeAnnotation.class);
-        sentences.get(i).updateParse(serializer.toProto(tree));
+        Tree binaryTree = sentence.get(TreeCoreAnnotations.BinarizedTreeAnnotation.class);
+        sentences.get(i).updateParse(serializer.toProto(tree),
+                                     binaryTree == null ? null : serializer.toProto(binaryTree));
         sentences.get(i).updateDependencies(
             ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.BasicDependenciesAnnotation.class)),
-            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.CollapsedDependenciesAnnotation.class)),
-            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.CollapsedCCProcessedDependenciesAnnotation.class)));
+            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.EnhancedDependenciesAnnotation.class)),
+            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class)));
       }
     }
     return this;
@@ -768,8 +945,8 @@ public class Document {
         CoreMap sentence = ann.get(CoreAnnotations.SentencesAnnotation.class).get(i);
         sentences.get(i).updateDependencies(
             ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.BasicDependenciesAnnotation.class)),
-            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.CollapsedDependenciesAnnotation.class)),
-            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.CollapsedCCProcessedDependenciesAnnotation.class)));
+            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.EnhancedDependenciesAnnotation.class)),
+            ProtobufAnnotationSerializer.toProto(sentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class)));
       }
     }
     return this;
@@ -821,7 +998,7 @@ public class Document {
 
 
   Document runKBP(Properties props) {
-    if (haveRunOpenie) {
+    if (haveRunKBP) {
       return this;
     }
     // Run prerequisites
@@ -841,7 +1018,33 @@ public class Document {
       }
     }
     // Return
-    haveRunOpenie = true;
+    haveRunKBP = true;
+    return this;
+  }
+
+
+  Document runSentiment(Properties props) {
+    if (this.sentences != null && this.sentences.size() > 0 && this.sentences.get(0).rawSentence().hasSentiment()) {
+        return this;
+    }
+    // Run prerequisites
+    runParse(props);
+    if (this.sentences != null && this.sentences.size() > 0 && !this.sentences.get(0).rawSentence().hasBinarizedParseTree()) {
+      throw new IllegalStateException("No binarized parse tree (perhaps it's not supported in this language?)");
+    }
+    // Run annotator
+    Annotation ann = asAnnotation();
+    Supplier<Annotator> sentiment = (props == EMPTY_PROPS || props == SINGLE_SENTENCE_DOCUMENT) ? defaultSentiment : getOrCreate(AnnotatorFactories.sentiment(props, backend));
+    sentiment.get().annotate(ann);
+    // Update data
+    synchronized (serializer) {
+      for (int i = 0; i < sentences.size(); ++i) {
+        CoreMap sentence = ann.get(CoreAnnotations.SentencesAnnotation.class).get(i);
+        String sentimentClass = sentence.get(SentimentCoreAnnotations.SentimentClass.class);
+        sentences.get(i).updateSentiment(sentimentClass);
+      }
+    }
+    // Return
     return this;
   }
 

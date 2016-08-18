@@ -1,5 +1,4 @@
-package edu.stanford.nlp.process; 
-import edu.stanford.nlp.util.logging.Redwood;
+package edu.stanford.nlp.process;
 
 // Stanford English Tokenizer -- a deterministic, fast high-quality tokenizer
 // Copyright (c) 2002-2016 The Board of Trustees of
@@ -43,6 +42,7 @@ import edu.stanford.nlp.io.RuntimeIOException;
 import edu.stanford.nlp.util.Generics;
 import edu.stanford.nlp.util.PropertiesUtils;
 import edu.stanford.nlp.util.StringUtils;
+import edu.stanford.nlp.util.logging.Redwood;
 
 
 /**
@@ -113,7 +113,7 @@ import edu.stanford.nlp.util.StringUtils;
  * <li>normalizeOtherBrackets: Whether to map other common bracket characters
  *     to -LCB-, -LRB-, -RCB-, -RRB-, roughly as in the Penn Treebank.
  *     Default is true.
- * <li>asciiQuotes Whether to map all quote characters to the traditional ' and ".
+ * <li>asciiQuotes: Whether to map all quote characters to the traditional ' and ".
  *     Default is false.
  * <li>latexQuotes: Whether to map quotes to ``, `, ', '', as in Latex
  *     and the PTB3 WSJ (though this is now heavily frowned on in Unicode).
@@ -153,6 +153,10 @@ import edu.stanford.nlp.util.StringUtils;
  *      (Exception: for only "U.S." the treebank does have the two tokens
  *      "U.S." and "." like our default; strictTreebank3 now does that too.)
  *      The default is false.
+ *  <li>splitHyphenated: whether or not to tokenize segments of hyphenated words
+ *      separately ("school" "-" "aged", "frog" "-" "lipped"), keeping the exceptions
+ *      in Supplementary Guidelines for ETTB 2.0 by Justin Mott, Colin Warner, Ann Bies,
+ *      Ann Taylor. Default is false, which maintains old treebank tokenizer behavior.
  * </ol>
  * <p>
  * A single instance of a PTBTokenizer is not thread safe, as it uses

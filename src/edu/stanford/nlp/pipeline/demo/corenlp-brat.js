@@ -1,8 +1,7 @@
 // Takes Stanford CoreNLP JSON output (var data = ... in data.js)
 // and uses brat to render everything.
 
-//var serverAddress = 'http://localhost:9000';
-//var serverAddress = 'http://corenlp.run';
+// var serverAddress = 'http://localhost:9000';
 var serverAddress = '';
 
 // Load Brat libraries
@@ -116,6 +115,28 @@ function nerColor(nerTag) {
   }
 }
 
+
+/**
+ * A mapping from sentiment value to the associated
+ * visualization color
+ */
+function sentimentColor(sentiment) {
+  if (sentiment == "VERY POSITIVE") {
+    return '#00FF00';
+  } else if (sentiment == "POSITIVE") {
+    return '#7FFF00';
+  } else if (sentiment == "NEUTRAL") {
+    return '#FFFF00';
+  } else if (sentiment == "NEGATIVE") {
+    return '#FF7F00';
+  } else if (sentiment == "VERY NEGATIVE") {
+    return '#FF0000';
+  } else {
+    return '#E3E3E3';
+  }
+}
+
+
 /**
  * Get a list of annotators, from the annotator option input.
  */
@@ -125,6 +146,23 @@ function annotators() {
     annotators += "," + $(this).val();
   });
   return annotators;
+}
+
+/**
+ * Get the input date
+ */
+function date() {
+  function f(n) {
+    return n < 10 ? '0' + n : n;
+  }
+  var date = new Date();
+  var M = date.getMonth() + 1;
+  var D = date.getDate();
+  var Y = date.getFullYear();
+  var h = date.getHours();
+  var m = date.getMinutes();
+  var s = date.getSeconds();
+  return "" + Y + "-" + f(M) + "-" + f(D) + "T" + f(h) + ':' + f(m) + ':' + f(s);
 }
 
 // ----------------------------------------------------------------------------
@@ -143,7 +181,10 @@ function render(data) {
    */
   var entityTypesSet = {};
   var entityTypes = [];
-  function addEntityType(name, type) {
+  function addEntityType(name, type, coarseType) {
+    if (typeof coarseType == "undefined") {
+      coarseType = type;
+    }
     // Don't add duplicates
     if (entityTypesSet[type]) return;
     entityTypesSet[type] = true;
@@ -152,7 +193,7 @@ function render(data) {
     if (name == 'POS') {
       color = posColor(type);
     } else if (name == 'NER') {
-      color = nerColor(type);
+      color = nerColor(coarseType);
     } else if (name == 'COREF') {
       color = '#FFE000';
     } else if (name == 'ENTITY') {
@@ -161,6 +202,8 @@ function render(data) {
       color = posColor('VB');
     } else if (name == 'LEMMA') {
       color = '#FFFFFF';
+    } else if (name == 'SENTIMENT') {
+      color = sentimentColor(type);
     } else if (name == 'LINK') {
       color = '#FFFFFF';
     } else if (name == 'KBP_ENTITY') {
@@ -228,6 +271,8 @@ function render(data) {
   var lemmaEntities = [];
   // (ner)
   var nerEntities = [];
+  // (sentiment)
+  var sentimentEntities = [];
   // (entitylinking)
   var linkEntities = [];
   // (dependencies)
@@ -253,8 +298,8 @@ function render(data) {
     var sentence = data.sentences[sentI];
     var index = sentence.index;
     var tokens = sentence.tokens;
-    var deps = sentence['basic-dependencies'];
-    var deps2 = sentence['collapsed-ccprocessed-dependencies'];
+    var deps = sentence['basicDependencies'];
+    var deps2 = sentence['enhancedPlusPlusDependencies'];
   
     // POS tags
     /**
@@ -316,13 +361,25 @@ function render(data) {
     if (tokens.length > 0 && typeof tokens[0].ner != 'undefined') {
       for (var i = 0; i < tokens.length; i++) {
         var ner = tokens[i].ner;
+        var normalizedNER = tokens[i].normalizedNER;
+        if (typeof normalizedNER == "undefined") {
+          normalizedNER = ner;
+        }
         if (ner == 'O') continue;
         var j = i;
         while (j < tokens.length - 1 && tokens[j+1].ner == ner) j++;
-        addEntityType('NER', ner);
-        nerEntities.push(['NER_' + sentI + '_' + i, ner, [[tokens[i].characterOffsetBegin, tokens[j].characterOffsetEnd]]]);
+        addEntityType('NER', normalizedNER, ner);
+        nerEntities.push(['NER_' + sentI + '_' + i, normalizedNER, [[tokens[i].characterOffsetBegin, tokens[j].characterOffsetEnd]]]);
         i = j;
       }
+    }
+    
+    // Sentiment
+    if (typeof sentence.sentiment != "undefined") {
+      var sentiment = sentence.sentiment.toUpperCase().replace("VERY", "VERY ");
+      addEntityType('SENTIMENT', sentiment);
+      sentimentEntities.push(['SENTIMENT_' + sentI, sentiment,
+        [[tokens[0].characterOffsetBegin, tokens[tokens.length - 1].characterOffsetEnd]]]);
     }
 
     // Entity Links
@@ -515,6 +572,7 @@ function render(data) {
     embed('coref', corefEntities, corefRelations);
     embed('openie', openieEntities, openieRelations);
     embed('kbp',    kbpEntities, kbpRelations);
+    embed('sentiment', sentimentEntities);
   });
 
 }  // End render function
@@ -709,8 +767,9 @@ $(document).ready(function() {
     $.ajax({
       type: 'POST',
       url: serverAddress + '?properties=' + encodeURIComponent(
-        '{"annotators": "' + annotators() + '", "coref.md.type": "dep", "coref.mode": "statistical"}'),
-      data: currentQuery,
+        '{"annotators": "' + annotators() + '", "date": "' + date() + '"' +
+        ', "coref.md.type": "dep", "coref.mode": "statistical"}'),
+      data: encodeURIComponent(currentQuery), //jQuery does'nt automatically URI encode strings
       dataType: 'json',
       contentType: "application/x-www-form-urlencoded;charset=UTF-8",
       success: function(data) {
@@ -727,7 +786,7 @@ $(document).ready(function() {
               return; 
             }
             // (make sure the data contains that element)
-            ok = false
+            ok = false;
             if (typeof data[selector] != 'undefined') {
               ok = true;
             } else if (typeof data.sentences != 'undefined' && data.sentences.length > 0) {
@@ -747,12 +806,13 @@ $(document).ready(function() {
           createAnnotationDiv('pos',      'pos',        'pos',                                 'Part-of-Speech'          );
           createAnnotationDiv('lemma',    'lemma',      'lemma',                               'Lemmas'                  );
           createAnnotationDiv('ner',      'ner',        'ner',                                 'Named Entity Recognition');
-          createAnnotationDiv('deps',     'depparse',   'basic-dependencies',                  'Basic Dependencies'      );
-          createAnnotationDiv('deps2',    'depparse',   'collapsed-ccprocessed-dependencies',  'Enhanced Dependencies'   );
+          createAnnotationDiv('deps',     'depparse',   'basicDependencies',                   'Basic Dependencies'      );
+          createAnnotationDiv('deps2',    'depparse',   'enhancedPlusPlusDependencies',        'Enhanced++ Dependencies' );
           createAnnotationDiv('openie',   'openie',     'openie',                              'Open IE'                 );
           createAnnotationDiv('coref',    'coref',      'corefs',                              'Coreference'             );
           createAnnotationDiv('entities', 'entitylink', 'entitylink',                          'Wikidict Entities'       );
           createAnnotationDiv('kbp',      'kbp',        'kbp',                                 'KBP Relations'           );
+          createAnnotationDiv('sentiment','sentiment',  'sentiment',                           'Sentiment'               );
           // Update UI
           $('#loading').hide();
           $('.corenlp_error').remove();  // Clear error messages
@@ -796,7 +856,7 @@ $(document).ready(function() {
     $.ajax({
       type: 'POST',
       url: serverAddress + '/tokensregex?pattern=' + encodeURIComponent(pattern.replace("&", "\\&").replace('+', '\\+')),
-      data: currentQuery,
+      data: encodeURIComponent(currentQuery),
       success: function(data) {
         $('.tokensregex_error').remove();  // Clear error messages
         $('<div id="tokensregex" class="pattern_brat"/>').appendTo($('#div_tokensregex'));
@@ -828,7 +888,7 @@ $(document).ready(function() {
     $.ajax({
       type: 'POST',
       url: serverAddress + '/semgrex?pattern=' + encodeURIComponent(pattern.replace("&", "\\&").replace('+', '\\+')),
-      data: currentQuery,
+      data: encodeURIComponent(currentQuery),
       success: function(data) {
         $('.semgrex_error').remove();  // Clear error messages
         $('<div id="semgrex" class="pattern_brat"/>').appendTo($('#div_semgrex'));
