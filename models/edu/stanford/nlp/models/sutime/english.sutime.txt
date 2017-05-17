@@ -915,7 +915,7 @@
   ENV.defaults["ruleType"] = "tokens"
 
   # Vague times
-  { ( /the/ /past/ | /recent|recently|lately|newly/ | /not/ /long/ /ago/ | /these/ /days/) => TIME_PAST }
+  { ( /the/ /past/ | /newly/ | /not/ /long/ /ago/ | /these/ /days/) => TIME_PAST }
   { pattern: ( /at/ /the/ (/time/) ), matchedExpressionGroup: 1, result: TIME_PAST }
   { ( /once|medieval|previously/ ) => TIME_PAST }
   { ( /present|presently|current|currently/ | /right/? /now/ ) => TIME_PRESENT }
