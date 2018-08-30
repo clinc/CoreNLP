@@ -58,7 +58,7 @@ public class StanfordCoreNLPServer implements Runnable {
   @ArgumentParser.Option(name="server_id", gloss="a name for this server")
   protected String serverID; // = null; // currently not used
   @ArgumentParser.Option(name="port", gloss="The port to run the server on")
-  protected int serverPort = 9000;
+  protected int serverPort = 25900;
   @ArgumentParser.Option(name="status_port", gloss="The port to serve the status check endpoints on. If different from the server port, this will run in a separate thread.")
   protected int statusPort = serverPort;
   @ArgumentParser.Option(name="uriContext", gloss="The URI context")
