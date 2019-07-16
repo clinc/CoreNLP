@@ -14,8 +14,8 @@
 
   $INT_TIMES = ( $INT /times/ | once | twice | thrice );
   $REL_MOD = ( /the/? /next|following|last|previous/ | /this/ /coming|past/? | /the/ /coming|past/ );
-  $FREQ_MOD = ( /each|per/ | /every|per/ $NUM_ORD | /every|per/ /other|alternate|alternating/? | /alternate|alternating/ );
-  $EARLY_LATE_MOD = ( /late|early|mid-?/ | /the/? /beginning|start|dawn|middle|end/ /of/ );
+  $FREQ_MOD = ( /each/ | /every/ $NUM_ORD | /every/ /other|alternate|alternating/? | /alternate|alternating/ );
+  $EARLY_LATE_MOD = ( /late|early|mid-?/ | /the/? /beginning|start|dawn|middle|end/ /of/ | /late|early/ /in|on/ );
   $APPROX_MOD = ( /about|around|some|exactly|precisely/ );
   $YEAR = ( /[012]\d\d\d/ | /'\d\d/ | /'/ /\d\d/ | /\w+teen|twenty/ [ { numcompvalue<100 } & { numcompvalue>0 } & $INT ] );
   $POSSIBLE_YEAR = ( $YEAR /a\.?d\.?|b\.?c\.?/? | $INT /a\.?d\.?|b\.?c\.?/ | $INT1000TO3000 );
@@ -250,6 +250,7 @@
   { (/suppertimes?/) => SUPPERTIME }
   { (/daylights?|days?|daytimes?/) => DAYTIME }
   { (/nighttimes?|nights?|overnights?/) => NIGHT }
+  { (/workday|work day|business hours/) => WORKDAY }
 
   # Seasons
   { (/summers?/) => SUMMER }
@@ -308,9 +309,12 @@
   { (/dec\.?/) => DECEMBER }
 
   { ruleType: "filter",
-	over: NIL,
-    pattern: ( [ { temporal::IS_TIMEX_DATE } & {{ tokens[0].tag =~ /NN.*S/ }} ] ),
-    result: MakePeriodicTemporalSet($0[0].temporal.value)
+    over: NIL,
+    // We added the end in "s" condition to avoid tagging mistakes (as with 1879) leading to non-plurals being SET
+    pattern: ( [ { temporal::IS_TIMEX_DATE } & {{ tokens[0].tag =~ /NN.*S/ }} & {{ tokens[0].word =~ /.+s/ }} ] ),
+    result: MakePeriodicTemporalSet($0[0].temporal.value),
+    // Set to TRUE to turn anything that is labeled a date but marked as plural to be a set
+    active: FALSE
   }
 
   ########################################################################################################################
@@ -888,26 +892,41 @@
 	           ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
     result: $0[-1].temporal.value
   }
-
   { name: "temporal-composite-7a",
     pattern: ( /every/ ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
-	result: MakePeriodicTemporalSet($1[0].temporal, "every", 1 )
+	  result: MakePeriodicTemporalSet($1[0].temporal, "every", 1 )
   }
-
   { name: "temporal-composite-7b",
-#    pattern: ( ( $FREQ_MOD ) ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
+#   pattern: ( ( $FREQ_MOD ) ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
     pattern: ( ( $FREQ_MOD ) ( [ $hasTemporal ] ) ),
-	result: MakePeriodicTemporalSet($2[0].temporal, GetTag($1[0], "PTS.quant"), GetTag($1[0], "PTS.multiple") )
+	  result: MakePeriodicTemporalSet($2[0].temporal, GetTag($1[0], "PTS.quant"), GetTag($1[0], "PTS.multiple") )
   }
-
-  { name: "temporal-composite-8:ranges",
-	active: options."markTimeRanges",
-    pattern: ( /from|between/? ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } |   {   temporal::IS_TIMEX_DATE } ] ) ),
-	result: TimeRange( $1[0].temporal.value, $2[0].temporal.value ) }
-
+  { name: "temporal-composite-8a",
+    active: options."markTimeRanges",
+    pattern: ( /from|between/ /the/? ($INTORD) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ),
+	  result: TimeRange( $1[0].numcompvalue, $2[0].temporal.value.month, $2[0].temporal.value )
+  }
+  { name: "temporal-composite-8b",
+	  active: options."markTimeRanges",
+    pattern: ( /from|between/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } |   {   temporal::IS_TIMEX_DATE } ] ) ),
+	  result: TimeRange( $1[0].temporal.value, $2[0].temporal.value )
+  }
   { name: "temporal-composite-9",
-	pattern: ( [{ temporal::IS_TIMEX_TIME }] (?: /sharp/|/exactly/|/precisely/|/on/ /the/ /dot/) ),
-    result: $0[0].temporal.value }
+	  pattern: ( [{ temporal::IS_TIMEX_TIME }] (?: /sharp/|/exactly/|/precisely/|/on/ /the/ /dot/) ),
+    result: $0[0].temporal.value
+  }
+  { name: "temporal-composite-10",
+	  pattern: ( /since/ ( [ { temporal::IS_TIMEX_DATE } ] ) ),
+    result: TimeRange( $1[0].temporal.value, NIL, 0, 0 )
+  }
+  { name: "temporal-composite-11",
+	  pattern: ( ( /after/ | /later/ /than/ ) /the/? ( [ { temporal::IS_TIMEX_DATE } ] ) ),
+    result: TimeRange( $2[0].temporal.value, NIL, 1, 0 )
+  }
+  { name: "temporal-composite-12",
+	  pattern: ( ( /before/ | /prior/ /to/ | /until/ ) /the/? ( [ { temporal::IS_TIMEX_DATE } ] ) ),
+    result: TimeRange( NIL, $2[0].temporal.value, 0, 1 )
+  }
 
   ########################################################################################################################
 
@@ -915,10 +934,10 @@
   ENV.defaults["ruleType"] = "tokens"
 
   # Vague times
-  { ( /the/ /past/ | /newly/ | /not/ /long/ /ago/ | /these/ /days/) => TIME_PAST }
+  { ( /the/ /past/ | /recently/ ) => TIME_PAST }
   { pattern: ( /at/ /the/ (/time/) ), matchedExpressionGroup: 1, result: TIME_PAST }
-  { ( /once|medieval|previously/ ) => TIME_PAST }
-  { ( /present|presently|current|currently/ | /right/? /now/ ) => TIME_PRESENT }
+  { ( /past|once|medieval|previously/ ) => TIME_PAST }
+  { ( /present|current|currently/ | /right/? /now/ ) => TIME_PRESENT }
   { (  /the/? /near/? /future/ ) => TIME_FUTURE }
 
   # Final rules to determine how to resolve date
@@ -930,7 +949,7 @@
   {  pattern: ( [ { tag:/VBD/ } | /have/ ] []{0,2} [ $hasTemporal ] ),
      action: VTag( $0[-1].temporal.value, "resolveTo", RESOLVE_TO_PAST )
   }
-  {  pattern: ( [ $hasTemporal ] []{0,2} [ { tag:/VBD/ } | /have/ ] ),
+  {  pattern: ( [ $hasTemporal ] []{0,2} [ { tag:/VBD/ } | /after/ | /since/ ] ),
      action: VTag( $0[0].temporal.value, "resolveTo", RESOLVE_TO_PAST )
   }
   {  pattern: ( (/would/ | /could/ | /should/ | /will/ | /going/ /to/ | /'/ /ll/ | /'ll/ )
