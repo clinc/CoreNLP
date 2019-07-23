@@ -14,7 +14,7 @@
 
   $INT_TIMES = ( $INT /times/ | once | twice | thrice );
   $REL_MOD = ( /the/? /next|following|last|previous/ | /this/ /coming|past/? | /the/ /coming|past/ );
-  $FREQ_MOD = ( /each/ | /per/ | /every/ $NUM_ORD | /every/ /other|alternate|alternating/? | /alternate|alternating/ );
+  $FREQ_MOD = ( /each|every|per/ $NUM_ORD | /each|every|per/ /other|alternate|alternating/? | /alternate|alternating/ );
   $EARLY_LATE_MOD = ( /late|early|mid-?/ | /the/? /beginning|start|dawn|middle|end/ /of/ | /late|early/ /in|on/ );
   $APPROX_MOD = ( /about|around|some|exactly|precisely/ );
   $YEAR = ( /[012]\d\d\d/ | /'\d\d/ | /'/ /\d\d/ | /\w+teen|twenty/ [ { numcompvalue<100 } & { numcompvalue>0 } & $INT ] );
@@ -176,11 +176,11 @@
 	action: Tag($0, "Modifier", "MID") }
 
   # Frequency modifiers
-  { pattern: ( /each/ | /every/ | /per/ ),
+  { pattern: ( /each|every|per/ ),
     action: ( Tag($0, "PTS.quant", $0), Tag($0, "PTS.multiple", 1 ) ) }
-  { pattern: ( /every/ ($NUM_ORD|$INT) ),
+  { pattern: ( /each|every|per/ ($NUM_ORD|$INT) ),
     action: ( Tag($0, "PTS.quant", $0), Tag($0, "PTS.multiple", $1[0].numcompvalue ) ) }
-  { pattern: ( /every/ /other|alternate|alternating/ | /alternate|alternating/ ),
+  { pattern: ( /each|every|per/ /other|alternate|alternating/ | /alternate|alternating/ ),
     action: ( Tag($0, "PTS.quant", $0), Tag($0, "PTS.multiple", 2 ) ) }
 
   # Approximate modifiers
@@ -899,36 +899,57 @@
     result: $0[-1].temporal.value
   }
   { name: "temporal-composite-7a",
-    pattern: ( /every/ ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
+    pattern: ( /every|each|per/ ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
 	  result: MakePeriodicTemporalSet($1[0].temporal, "every", 1 )
   }
   { name: "temporal-composite-7b",
-#   pattern: ( ( $FREQ_MOD ) ( [ $hasTemporal & !{ temporal::IS_TIMEX_SET } ] ) ),
     pattern: ( ( $FREQ_MOD ) ( [ $hasTemporal ] ) ),
 	  result: MakePeriodicTemporalSet($2[0].temporal, GetTag($1[0], "PTS.quant"), GetTag($1[0], "PTS.multiple") )
   }
+
+  # handles time ranges where the first time is only an ordinal.
+  # e.g. between the first and third of june
+  # e.g. From the 10th through the 12th of December.
   { name: "temporal-composite-8a",
     active: options."markTimeRanges",
     pattern: ( /from|between/ /the/? ($INTORD) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ),
 	  result: TimeRange( $1[0].numcompvalue, $2[0].temporal.value.month, $2[0].temporal.value )
   }
+
+  # handles time ranges where both values are times/dates
+  # e.g. between the first of june and third of june
+  # e.g. From the 10th of December through the 12th of December.
   { name: "temporal-composite-8b",
 	  active: options."markTimeRanges",
     pattern: ( /from|between/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } |   {   temporal::IS_TIMEX_DATE } ] ) ),
 	  result: TimeRange( $1[0].temporal.value, $2[0].temporal.value )
   }
+
   { name: "temporal-composite-9",
 	  pattern: ( [{ temporal::IS_TIMEX_TIME }] (?: /sharp/|/exactly/|/precisely/|/on/ /the/ /dot/) ),
     result: $0[0].temporal.value
   }
+
+  # handles open-ended ranges inclusive of the start date
+  # e.g. since may
+  # e.g. since June 5th, 1918
   { name: "temporal-composite-10",
 	  pattern: ( /since/ ( [ { temporal::IS_TIMEX_DATE } ] ) ),
     result: TimeRange( $1[0].temporal.value, NIL, 0, 0 )
   }
+
+  # handles open-ended ranges exclusive of the start date
+  # e.g. after may
+  # e.g. later than June 5th, 1918
   { name: "temporal-composite-11",
 	  pattern: ( ( /after/ | /later/ /than/ ) /the/? ( [ { temporal::IS_TIMEX_DATE } ] ) ),
     result: TimeRange( $2[0].temporal.value, NIL, 1, 0 )
   }
+
+  # handles open-ended ranges exclusive of the end date
+  # e.g. before the sixth of may
+  # e.g. prior to June 5th, 1918
+  # e.g. until sunday
   { name: "temporal-composite-12",
 	  pattern: ( ( /before/ | /prior/ /to/ | /until/ ) /the/? ( [ { temporal::IS_TIMEX_DATE } ] ) ),
     result: TimeRange( NIL, $2[0].temporal.value, 0, 1 )
@@ -940,10 +961,10 @@
   ENV.defaults["ruleType"] = "tokens"
 
   # Vague times
-  { ( /the/ /past/ | /recently/ ) => TIME_PAST }
+  { ( /the/ /past/ | /recently/ | /newly/ | /not/ /long/ /ago/ | /these/ /days/) => TIME_PAST }
   { pattern: ( /at/ /the/ (/time/) ), matchedExpressionGroup: 1, result: TIME_PAST }
   { ( /past|once|medieval|previously/ ) => TIME_PAST }
-  { ( /present|current|currently/ | /right/? /now/ ) => TIME_PRESENT }
+  { ( /present|presently|current|currently/ | /right/? /now/ ) => TIME_PRESENT }
   { (  /the/? /near/? /future/ ) => TIME_FUTURE }
 
   # Final rules to determine how to resolve date
@@ -955,7 +976,7 @@
   {  pattern: ( [ { tag:/VBD/ } | /have/ ] []{0,2} [ $hasTemporal ] ),
      action: VTag( $0[-1].temporal.value, "resolveTo", RESOLVE_TO_PAST )
   }
-  {  pattern: ( [ $hasTemporal ] []{0,2} [ { tag:/VBD/ } | /after/ | /since/ ] ),
+  {  pattern: ( [ $hasTemporal ] []{0,2} [ { tag:/VBD/ } | /after/ | /since/ | /have/ ] ),
      action: VTag( $0[0].temporal.value, "resolveTo", RESOLVE_TO_PAST )
   }
   {  pattern: ( (/would/ | /could/ | /should/ | /will/ | /going/ /to/ | /'/ /ll/ | /'ll/ )
