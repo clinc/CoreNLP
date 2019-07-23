@@ -2,12 +2,12 @@
   ENV.defaults["ruleType"] = "tokens"
 
   $POSS = "( /'s/ | /'/ /s/ )"
-  { (/new/ (/year|years/) $POSS? /eve/ ) => IsoDate(NIL, 12, 31) }
-  { (/new/ (/year|years/) $POSS? /day/? ) => IsoDate(NIL, 1, 1) }
+  { (/new/ (/years?/) $POSS? /eve/ ) => IsoDate(NIL, 12, 31) }
+  { (/new/ (/years?/) $POSS? /day/? ) => IsoDate(NIL, 1, 1) }
   { (/inauguration/ /day/ ) => IsoDate(NIL, 1, 20) }
   { (/groundhog/ /day/ ) => IsoDate(NIL, 2, 2) }
-  { (/st.?|saint/? (/valentine|valentines/) $POSS? /day/ ) => IsoDate(NIL, 2, 14) }
-  { (/st.?|saint/ (/patrick|patricks|patty|pattys/) $POSS? /day/ ) => IsoDate(NIL, 3, 17) }
+  { (/st.?|saint/? (/valentines?/) $POSS? /day/ ) => IsoDate(NIL, 2, 14) }
+  { (/st.?|saint/ (/patricks?|pattys?/) $POSS? /day/ ) => IsoDate(NIL, 3, 17) }
   { (/april/ /fools/ /day/? ) => IsoDate(NIL, 4, 1) }
   { (/cinco/ /de/ /mayo/ ) => IsoDate(NIL, 5, 5) }
   { (/independence/ /day/ ) => IsoDate(NIL, 7, 4) }

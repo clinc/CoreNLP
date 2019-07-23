@@ -14,7 +14,7 @@
 
   $INT_TIMES = ( $INT /times/ | once | twice | thrice );
   $REL_MOD = ( /the/? /next|following|last|previous/ | /this/ /coming|past/? | /the/ /coming|past/ );
-  $FREQ_MOD = ( /each/ | /every/ $NUM_ORD | /every/ /other|alternate|alternating/? | /alternate|alternating/ );
+  $FREQ_MOD = ( /each/ | /per/ | /every/ $NUM_ORD | /every/ /other|alternate|alternating/? | /alternate|alternating/ );
   $EARLY_LATE_MOD = ( /late|early|mid-?/ | /the/? /beginning|start|dawn|middle|end/ /of/ | /late|early/ /in|on/ );
   $APPROX_MOD = ( /about|around|some|exactly|precisely/ );
   $YEAR = ( /[012]\d\d\d/ | /'\d\d/ | /'/ /\d\d/ | /\w+teen|twenty/ [ { numcompvalue<100 } & { numcompvalue>0 } & $INT ] );
@@ -176,7 +176,7 @@
 	action: Tag($0, "Modifier", "MID") }
 
   # Frequency modifiers
-  { pattern: ( /each/ | /every/ ),
+  { pattern: ( /each/ | /every/ | /per/ ),
     action: ( Tag($0, "PTS.quant", $0), Tag($0, "PTS.multiple", 1 ) ) }
   { pattern: ( /every/ ($NUM_ORD|$INT) ),
     action: ( Tag($0, "PTS.quant", $0), Tag($0, "PTS.multiple", $1[0].numcompvalue ) ) }
@@ -593,6 +593,12 @@
     }
   }
 
+  # i.e. the month of may
+  { name: "composite-date-expression-0",
+  priority: 1,
+  pattern: ( /the/? /month/ /of/ (?$month [ { temporal::MONTH } ]) ),
+  result: IsoDate( NIL, $month[0].temporal.value.month, NIL ) }
+
   { name: "composite-date-expression-1a",
 	priority: 1,
 	pattern: ( (/every/ $NUM_ORD) (?$month [ { temporal::MONTH }]) ),
@@ -977,4 +983,3 @@
 
   # Reject anything that is just a timezone
   {  pattern: ( [ {{ tags["TIMEZONE"] }} ] ), over: NIL  }
-
