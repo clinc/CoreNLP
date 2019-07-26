@@ -551,17 +551,25 @@ public class NumberNormalizer {
       for (int i = matcher.start(); i < matcher.end(); i++) {
         CoreLabel token = tokens.get(i);
         CoreLabel prev = (i > matcher.start())? tokens.get(i - 1): null;
+        CoreLabel twoBack = (i - 1 > matcher.start())? tokens.get(i - 2): null;
         Number num = token.get(CoreAnnotations.NumericValueAnnotation.class);
         Number prevNum = (prev != null)? prev.get(CoreAnnotations.NumericValueAnnotation.class):null;
+        String prevType = (prev != null)? prev.get(CoreAnnotations.NumericTypeAnnotation.class):null;
+        String twoBackType = (twoBack != null)? twoBack.get(CoreAnnotations.NumericTypeAnnotation.class):null;
         String w = token.word();
         w = w.trim().toLowerCase();
+        String p = (prev != null)? prev.word():null;
+        p = (prev != null)? p.trim().toLowerCase():null;
         switch (w) {
           case ",":
-            if (lastUnit != null && lastUnitPos == i - 1) {
-              // OKAY, this may be one big number
-              possibleNumEnd = i;
-              possibleNumEndUnit = lastUnit;
-            } else {
+          if ("ORDINAL".equals(prevType)) {
+            // We don't want to combine ordinals
+            numStart = i + 1;
+          } else if (lastUnit != null && lastUnitPos == i - 1) {
+            // OKAY, this may be one big number
+            possibleNumEnd = i;
+            possibleNumEndUnit = lastUnit;
+          } else {
               // Not one big number
               if (numStart < i) {
                 numbers.add(ChunkAnnotationUtils.getAnnotatedChunk(annotation, numStart, i));
@@ -582,8 +590,11 @@ public class NumberNormalizer {
             if (lastUnitPos == i - 1 || (lastUnitPos == i - 2 && ",".equals(prevWord))) {
               // Okay
             } else {
-              // Two separate numbers
-              if (numStart < possibleNumEnd) {
+              if ("ORDINAL".equals(prevType) || (",".equals(p) && "ORDINAL".equals(twoBackType))) {
+                // We don't want to combine ordinals
+                numStart = i + 1;
+              } else if (numStart < possibleNumEnd) {
+                // Two separate numbers
                 numbers.add(ChunkAnnotationUtils.getAnnotatedChunk(annotation, numStart, possibleNumEnd));
                 if (possibleNumStart >= possibleNumEnd) {
                   numStart = possibleNumStart;
