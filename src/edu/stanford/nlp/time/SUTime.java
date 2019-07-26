@@ -4499,6 +4499,34 @@ public class SUTime  {
       this.duration = duration;
     }
 
+    public Range(Number beginDay, Number beginMonth, Time end) {
+      this.begin = (Time) new IsoDate(null, beginMonth, beginDay);
+      this.end = end;
+      this.duration = Time.difference(this.begin, this.end);
+    }
+
+    public Range(Time begin, Time end, int beginExclusive, int endExclusive) {
+      if (beginExclusive == 1) {
+        begin = shiftRight(begin);
+      }
+      if (endExclusive == 1) {
+        end = shiftLeft(end);
+      }
+      this.begin = begin;
+      this.end = end;
+      this.duration = DURATION_UNKNOWN;
+    }
+
+    private Time shiftLeft(Time time) {
+      Duration duration = time.getGranularity();
+      return time.subtract(duration);
+    }
+
+    private Time shiftRight(Time time) {
+      Duration duration = time.getGranularity();
+      return time.add(duration);
+    }
+
     @Override
     public Range setTimeZone(DateTimeZone tz) {
       return new Range(this, (Time) Temporal.setTimeZone(begin, tz), (Time) Temporal.setTimeZone(end, tz), duration);
