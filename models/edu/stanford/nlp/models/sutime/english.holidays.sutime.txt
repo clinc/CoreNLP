@@ -2,18 +2,20 @@
   ENV.defaults["ruleType"] = "tokens"
 
   $POSS = "( /'s/ | /'/ /s/ )"
-  { (/new/ (/years?/) $POSS? /eve/ ) => IsoDate(NIL, 12, 31) }
+  { (/new/ (/years?/) $POSS? /eve/ | /nye/) => IsoDate(NIL, 12, 31) }
   { (/new/ (/years?/) $POSS? /day/? ) => IsoDate(NIL, 1, 1) }
   { (/inauguration/ /day/ ) => IsoDate(NIL, 1, 20) }
   { (/groundhog/ /day/ ) => IsoDate(NIL, 2, 2) }
-  { (/st.?|saint/? (/valentines?/) $POSS? /day/ ) => IsoDate(NIL, 2, 14) }
-  { (/st.?|saint/ (/patricks?|pattys?/) $POSS? /day/ ) => IsoDate(NIL, 3, 17) }
+  { (/st.?|saint/? (/valentines?|vals?/) $POSS? /day/? ) => IsoDate(NIL, 2, 14) }
+  { (/st.?|saint/? (/patricks?|pa(tt|dd)ys?/) $POSS? /day/ ) => IsoDate(NIL, 3, 17) }
+  { (/st.?|saint/? /andrews?/ $POSS? /day/ ) => IsoDate(NIL, 11, 30) }
   { (/april/ /fools/ /day/? ) => IsoDate(NIL, 4, 1) }
   { (/cinco/ /de/ /mayo/ ) => IsoDate(NIL, 5, 5) }
   { (/independence/ /day/ ) => IsoDate(NIL, 7, 4) }
   { (/halloween/ ) => IsoDate(NIL, 10, 31) }
-  { (/x-?mas|christmas/ /eve/ ) => IsoDate(NIL, 12, 24) }
-  { (/x-?mas|christmas/ /day/? ) => IsoDate(NIL, 12, 25) }
+  { ((/x/ /`/ /mas/|/x-?mas/|/christmas/) /eve/ ) => IsoDate(NIL, 12, 24) }
+  { ((/x/ /`/ /mas/|/x-?mas/|/christmas/) /day/? ) => IsoDate(NIL, 12, 25) }
+  { (/boxing/ /day/ ) => IsoDate(NIL, 12, 26) }
 
 
   { (/martin/ /luther/ /king/ /day/ | /mlk/ /day/) => JH_MARTIN_LUTHER_KING }

@@ -4527,6 +4527,12 @@ public class SUTime  {
       this.duration = Time.difference(this.begin, this.end);
     }
 
+    public Range(Time begin, Number endMonth, Number endDay) {
+      this.begin = begin;
+      this.end = (Time) new IsoDate(null, endMonth, endDay);
+      this.duration = Time.difference(this.begin, this.end);
+    }
+
     public Range(Time begin, Time end, int beginExclusive, int endExclusive) {
       if (beginExclusive == 1) {
         begin = shiftRight(begin);
