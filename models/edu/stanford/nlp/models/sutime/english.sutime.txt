@@ -12,6 +12,8 @@
   $INT1TO31 = ( [ $INTORD & !{ word:/\+.*/} & { numcompvalue>=1 } & { numcompvalue<=31 } ] );
   $NUM_ORD = ( [ { numcomptype:ORDINAL } ] );
 
+  $THROUGH = ( /to|through|thru|till|until|til|-/ );
+
   $INT_TIMES = ( $INT /times/ | once | twice | thrice );
   $REL_MOD = ( /the/? /next|following|last|previous/ | /this/ /coming|past/? | /the/ /coming|past/ );
   $FREQ_MOD = ( /each|every|per/ $NUM_ORD | /each|every|per/ /other|alternate|alternating/? | /alternate|alternating/ );
@@ -912,17 +914,53 @@
   # e.g. From the 10th through the 12th of December.
   { name: "temporal-composite-8a",
     active: options."markTimeRanges",
-    pattern: ( /from|between/ /the/? ($INTORD) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ),
-	  result: TimeRange( $1[0].numcompvalue, $2[0].temporal.value.month, $2[0].temporal.value )
+    pattern: ( /from|between|since/ /the/? ($INTORD) ($THROUGH|/and/) ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ),
+	  result: TimeRange( $1[0].numcompvalue, $3[0].temporal.value.month, $3[0].temporal.value )
+  }
+
+  # handles time ranges where the second time is only an ordinal.
+  # e.g. between the first of june and the third
+  # e.g. From the 10th of December through the 12th.
+  { name: "temporal-composite-8b",
+    active: options."markTimeRanges",
+    pattern: ( /from|between|since/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ($THROUGH|/and/) /the/? ($INTORD) ),
+	  result: TimeRange( $1[0].temporal.value, $1[0].temporal.value.month, $3[0].numcompvalue )
+  }
+
+  # handles time ranges where both values are times/dates without a leading word
+  # e.g. first of june through third of june
+  # e.g. the 10th of December till the 12th of December.
+  { name: "temporal-composite-8c",
+	  active: options."markTimeRanges",
+    pattern: ( ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) $THROUGH ( [ { temporal::IS_TIMEX_TIME } |   {   temporal::IS_TIMEX_DATE } ] ) ),
+	  result: TimeRange( $1[0].temporal.value, $2[0].temporal.value )
   }
 
   # handles time ranges where both values are times/dates
   # e.g. between the first of june and third of june
   # e.g. From the 10th of December through the 12th of December.
-  { name: "temporal-composite-8b",
+  { name: "temporal-composite-8d",
 	  active: options."markTimeRanges",
-    pattern: ( /from|between/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) /to|and|through|-/ ( [ { temporal::IS_TIMEX_TIME } |   {   temporal::IS_TIMEX_DATE } ] ) ),
-	  result: TimeRange( $1[0].temporal.value, $2[0].temporal.value )
+    pattern: ( /from|between|since/ ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ($THROUGH|/and/) ( [ { temporal::IS_TIMEX_TIME } |   {   temporal::IS_TIMEX_DATE } ] ) ),
+	  result: TimeRange( $1[0].temporal.value, $3[0].temporal.value )
+  }
+
+  # handles time ranges where the first time is only a cardinal/ordinal without a leading word
+  # e.g. 1 - 28 Feb
+  # e.g. the 1st to 4th of May
+  { name: "temporal-composite-8e",
+    active: options."markTimeRanges",
+    pattern: ( /the/? ($INTORD) $THROUGH ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) ),
+	  result: TimeRange( $1[0].numcompvalue, $2[0].temporal.value.month, $2[0].temporal.value )
+  }
+
+  # handles time ranges where the second time is only a cardinal/ordinal without a leading word
+  # e.g. june 1st through the 4th
+  # e.g. 12 December to the twentieth.
+  { name: "temporal-composite-8f",
+    active: options."markTimeRanges",
+    pattern: ( ( [ { temporal::IS_TIMEX_TIME } | { temporal::IS_TIMEX_DATE } ] ) $THROUGH /the/? ($INTORD) ),
+	  result: TimeRange( $1[0].temporal.value, $1[0].temporal.value.month, $2[0].numcompvalue )
   }
 
   { name: "temporal-composite-9",
