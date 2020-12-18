@@ -168,11 +168,37 @@ public class StanfordCoreNLPServer implements Runnable {
    * @throws IOException Thrown if we could not write the shutdown key to the a file.
    */
   public StanfordCoreNLPServer(Properties props) throws IOException {
+    String defaultParserPath;
+    ClassLoader classLoader = getClass().getClassLoader();
+    URL srResource =
+            classLoader.getResource("edu/stanford/nlp/models/srparser/englishSR.ser.gz");
+    log("setting default constituency parser");
+    if (srResource != null) {
+      defaultParserPath = "edu/stanford/nlp/models/srparser/englishSR.ser.gz";
+      log("using SR parser: edu/stanford/nlp/models/srparser/englishSR.ser.gz");
+    } else {
+      defaultParserPath = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
+      log("warning: cannot find edu/stanford/nlp/models/srparser/englishSR.ser.gz");
+      log("using: edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz instead");
+      log("to use shift reduce parser download English models jar from:");
+      log("http://stanfordnlp.github.io/CoreNLP/download.html");
+    }
+
     // set up default IO properties
     this.serverIOProps = new Properties();
+    this.serverIOProps.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner");
+    this.serverIOProps.setProperty("ner.combinationMode", "HIGH_RECALL");
+    this.serverIOProps.setProperty("ner.useSUTime", "true");
+    this.serverIOProps.setProperty("sutime.searchForDocDate", "true");
+    this.serverIOProps.setProperty("sutime.includeRange", "true");
+    this.serverIOProps.setProperty("sutime.markTimeRanges", "true");
+    this.serverIOProps.setProperty("sutime.teRelHeurLevel", "MORE");
     this.serverIOProps.setProperty("inputFormat", "text");
-    this.serverIOProps.setProperty("outputFormat", "json");
+    this.serverIOProps.setProperty("outputFormat", "text");
     this.serverIOProps.setProperty("prettyPrint", "false");
+    this.serverIOProps.setProperty("parse.model", "edu/stanford/nlp/models/srparser/englishSR.ser.gz");
+    this.serverIOProps.setProperty("parse.binaryTrees", "true");
+    this.serverIOProps.setProperty("openie.strip_entailments", "true");
 
     // set up default properties
     this.defaultProps = new Properties();
